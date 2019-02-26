@@ -6,14 +6,7 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 @Retention(RetentionPolicy.CLASS)
-@Target(ElementType.FIELD)
-public @interface FieldOf {
-    String value();
-
-    boolean getter() default true;
-
-    boolean setter() default true;
-
-    String fieldName() default "";
-
+@Target(ElementType.TYPE)
+public @interface Models {
+    Model[] value() default {};
 }

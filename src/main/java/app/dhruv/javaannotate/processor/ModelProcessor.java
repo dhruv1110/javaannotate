@@ -1,10 +1,9 @@
 package app.dhruv.javaannotate.processor;
 
 import app.dhruv.javaannotate.annotations.Model;
+import app.dhruv.javaannotate.annotations.Models;
 import com.google.auto.service.AutoService;
-import com.squareup.javapoet.ClassName;
 import com.squareup.javapoet.JavaFile;
-import com.squareup.javapoet.MethodSpec;
 import com.squareup.javapoet.TypeSpec;
 
 import javax.annotation.processing.*;
@@ -19,7 +18,7 @@ import java.io.IOException;
 import java.util.*;
 
 @SupportedAnnotationTypes(
-        "app.dhruv.javaannotate.annotations.Model")
+        "app.dhruv.javaannotate.annotations.Models")
 @SupportedSourceVersion(SourceVersion.RELEASE_8)
 @AutoService(Processor.class)
 public class ModelProcessor extends AbstractProcessor {
@@ -37,7 +36,7 @@ public class ModelProcessor extends AbstractProcessor {
 //
 //    @Override
 //    public Set<String> getSupportedAnnotationTypes() {
-//        return Collections.singleton(Model.class.getCanonicalName());
+//        return Collections.singleton(Models.class.getCanonicalName());
 //    }
 //
 //    @Override
@@ -53,12 +52,16 @@ public class ModelProcessor extends AbstractProcessor {
     public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
         messager.printMessage(Diagnostic.Kind.WARNING, "Searching==================");
 
-        for (Element element : roundEnv.getElementsAnnotatedWith(Model.class)) {
+        for (Element element : roundEnv.getElementsAnnotatedWith(Models.class)) {
             if (element.getKind() != ElementKind.CLASS){
                 messager.printMessage(Diagnostic.Kind.ERROR, "Can be applied to class.");
                 return true;
             }
-            String[] classNames = element.getAnnotation(Model.class).value();
+//            String[] classNames = element.getAnnotation(Models.class).value()[0].value();
+            List<String> classNames = new ArrayList<>();
+            for (Model model : element.getAnnotation(Models.class).value()) {
+                classNames.add(model.value());
+            }
 
 
             TypeElement typeElement = (TypeElement) element;

@@ -8,12 +8,17 @@ import java.lang.annotation.Target;
 @Retention(RetentionPolicy.CLASS)
 @Target(ElementType.FIELD)
 public @interface FieldOf {
-    String value();
+
+    /**
+     *
+     * @return
+     */
+    String value()  default "";
 
     boolean getter() default true;
 
     boolean setter() default true;
 
-    String fieldName() default "";
+    String[] excludeFrom() default {};
 
 }

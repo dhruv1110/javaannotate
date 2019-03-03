@@ -1,8 +1,6 @@
 package app.dhruv.javaannotate.processor;
 
-import app.dhruv.javaannotate.annotations.FieldOf;
-import app.dhruv.javaannotate.annotations.Model;
-import app.dhruv.javaannotate.annotations.Models;
+import app.dhruv.javaannotate.annotations.*;
 import app.dhruv.javaannotate.models.FieldModel;
 import app.dhruv.javaannotate.models.ModelsMap;
 import com.google.auto.service.AutoService;
@@ -24,72 +22,21 @@ import java.util.*;
 @AutoService(Processor.class)
 public class ModelProcessor extends AbstractProcessor {
     private Elements elements;
+    private boolean isAllFieldConstructorCreated = false;
     private Filer filer;
     private Messager messager;
+    private boolean isEmptyConstructorCreated = false;
     private Types types;
-    private TypeSpec.Builder modelClass;
-    private Map<String, FieldModel> fieldModelsMap;
-
-    private void createClasses(List<ModelsMap> modelsMaps) {
-        for (ModelsMap modelsMap : modelsMaps) {
-            fieldModelsMap = new HashMap<>();
-            for (String className : modelsMap.getReplicatedClasses()) {
-                modelClass = TypeSpec
-                        .classBuilder(className)
-                        .addModifiers(Modifier.PUBLIC, Modifier.FINAL);
-
-                List<VariableElement> allFields = ElementFilter.fieldsIn(modelsMap.getMainClass().getEnclosedElements());
-                for (VariableElement field : allFields) {
-                    String fieldName = field.getSimpleName().toString();
-                    Object value = null;
-
-
-                    FieldSpec.Builder fieldSpec = FieldSpec.builder(TypeName.get(field.asType()), fieldName)
-                            .addModifiers(field.getModifiers().toArray(new Modifier[field.getModifiers().size()]));
-
-                    if (field.getConstantValue() != null
-                            && field.getModifiers().contains(Modifier.FINAL)){
-                        value = field.getConstantValue();
-                        if (value instanceof String){
-                            fieldSpec.initializer("$S", value);
-                        } else if (value instanceof Long){
-                            fieldSpec.initializer("$LL", value);
-                        } else {
-                            fieldSpec.initializer("$L", value);
-                        }
-                    }
-                    modelClass.addField(fieldSpec.build());
-
-                    String capitalizeFieldName = fieldName.substring(0, 1).toUpperCase() + fieldName.substring(1);
-
-                    createSetter(field, fieldName, capitalizeFieldName);
-                    createGetter(field, fieldName, capitalizeFieldName);
-
-                    FieldModel fieldModel = new FieldModel(TypeName.get(field.asType()), fieldName, field.getModifiers().contains(Modifier.FINAL));
-                    fieldModelsMap.put(fieldName, fieldModel);
-
-
-                }
-                createEmptyConstructor();
-                createAllFieldConstructor();
-
-                try {
-                    JavaFile.builder(modelsMap.getPackageName(), modelClass.build())
-                            .build()
-                            .writeTo(filer);
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            }
-        }
-    }
+    private TypeSpec.Builder replicatedClassBuilder;
+    private Map<String, FieldModel> replicatedClassFieldsMap;
 
     private void createAllFieldConstructor() {
+        isAllFieldConstructorCreated = true;
 
         MethodSpec.Builder getterMethodSpec = MethodSpec.constructorBuilder()
                 .addModifiers(Modifier.PUBLIC);
 
-        for (FieldModel fieldModel : fieldModelsMap.values()) {
+        for (FieldModel fieldModel : replicatedClassFieldsMap.values()) {
             if (!fieldModel.isFinal()) {
                 ParameterSpec parameterSpec = ParameterSpec.builder(fieldModel.getTypeName(), fieldModel.getFieldName())
                         .build();
@@ -99,23 +46,162 @@ public class ModelProcessor extends AbstractProcessor {
         }
 
 
-        modelClass.addMethod(getterMethodSpec.build());
+        replicatedClassBuilder.addMethod(getterMethodSpec.build());
+    }
+
+    private void createBuilder(Model replicatedClassModel) {
+
+        // create static builder class
+        // initialize all the fields with null
+        // create set methods for all the fields
+        // create build() method and inside that create object with all argument constructor
+
+
+        TypeSpec typeSpec = TypeSpec.classBuilder("Builder")
+                .addModifiers(Modifier.PUBLIC, Modifier.STATIC)
+                .build();
+
+        replicatedClassBuilder.addType(typeSpec);
+    }
+
+    private void createClassElements(Model replicatedClassModel) {
+        if (replicatedClassModel.emptyConstructor()) {
+            createEmptyConstructor();
+        }
+
+        if (replicatedClassModel.allArgConstructor()) {
+            createAllFieldConstructor();
+        }
+
+        if (replicatedClassModel.singleton()) {
+            createSingleton(replicatedClassModel);
+        }
+
+        if (replicatedClassModel.builder()) {
+            createBuilder(replicatedClassModel);
+        }
+    }
+
+    private void createClasses(List<ModelsMap> modelsMaps) {
+
+        // iterate through all @Models annotation
+        for (ModelsMap modelsMap : modelsMaps) {
+
+            // iterate through all @Model annotation
+            for (Model replicatedClassModel : modelsMap.getReplicatedClasses()) {
+                replicatedClassFieldsMap = new HashMap<>();
+                isEmptyConstructorCreated = false;
+                isAllFieldConstructorCreated = false;
+                replicatedClassBuilder = TypeSpec
+                        .classBuilder(replicatedClassModel.value())
+                        .addModifiers(Modifier.PUBLIC);
+
+                List<VariableElement> originalFields
+                        = ElementFilter.fieldsIn(modelsMap.getMainClass().getEnclosedElements());
+
+                // get all the Fields from the original class
+                for (VariableElement originalField : originalFields) {
+
+                    boolean createGetter = replicatedClassModel.getters();
+                    boolean createSetter = replicatedClassModel.setters();
+                    String fieldName = originalField.getSimpleName().toString();
+
+
+                    if (originalField.getAnnotation(RenameField.class) != null) {
+                        RenameField renameField = originalField.getAnnotation(RenameField.class);
+                        if (renameField != null
+                                && !renameField.value().isEmpty()) {
+                            fieldName = renameField.value();
+                        }
+                    } else if (originalField.getAnnotation(Fields.class) != null) {
+                        Field[] replicatedFieldsConfig = originalField.getAnnotation(Fields.class).value();
+                        for (Field replicatedField : replicatedFieldsConfig) {
+                            if (replicatedField.value().equalsIgnoreCase(replicatedClassModel.value())) {
+                                fieldName = replicatedField.renameTo();
+                                createGetter = replicatedField.getter();
+                                createSetter = replicatedField.setter();
+                            }
+                        }
+                    }
+
+
+                    createElements(originalField, fieldName, createSetter, createGetter);
+
+
+                }
+
+                createClassElements(replicatedClassModel);
+
+                try {
+                    JavaFile.builder(modelsMap.getPackageName(), replicatedClassBuilder.build())
+                            .build()
+                            .writeTo(filer);
+                } catch (IOException e) {
+                    messager.printMessage(Diagnostic.Kind.ERROR, "Error creating replicated class, " + e.getMessage());
+                }
+            }
+        }
+    }
+
+    private void createElements(VariableElement originalField, String fieldName, boolean createSetter, boolean createGetter) {
+
+        createField(originalField, fieldName);
+        String capitalizeFieldName = fieldName.substring(0, 1).toUpperCase() + fieldName.substring(1);
+
+        if (createSetter) {
+            createSetter(originalField, fieldName, capitalizeFieldName);
+        }
+        if (createGetter) {
+            createGetter(originalField, fieldName, capitalizeFieldName);
+        }
+
+        FieldModel fieldModel = new FieldModel(TypeName.get(originalField.asType()), fieldName, originalField.getModifiers().contains(Modifier.FINAL));
+        replicatedClassFieldsMap.put(fieldName, fieldModel);
     }
 
     private void createEmptyConstructor() {
+        isEmptyConstructorCreated = true;
         MethodSpec getterMethodSpec = MethodSpec.constructorBuilder()
                 .addModifiers(Modifier.PUBLIC)
                 .build();
-        modelClass.addMethod(getterMethodSpec);
+        replicatedClassBuilder.addMethod(getterMethodSpec);
     }
 
-    private void createSetter(VariableElement field, String fieldName, String capitalizeFieldName){
-        if (field.getAnnotation(FieldOf.class) != null){
-            FieldOf fieldOf = field.getAnnotation(FieldOf.class);
-            if (!fieldOf.setter()){
-                return;
+    private void createField(VariableElement originalField, String fieldName) {
+        FieldSpec.Builder fieldSpec = FieldSpec.builder(TypeName.get(originalField.asType()), fieldName)
+                .addModifiers(originalField.getModifiers().toArray(new Modifier[originalField.getModifiers().size()]));
+
+        Object value = null;
+        if (originalField.getConstantValue() != null
+                && originalField.getModifiers().contains(Modifier.FINAL)) {
+            value = originalField.getConstantValue();
+            if (value instanceof String) {
+                fieldSpec.initializer("$S", value);
+            } else if (value instanceof Long) {
+                fieldSpec.initializer("$LL", value);
+            } else {
+                fieldSpec.initializer("$L", value);
             }
         }
+        replicatedClassBuilder.addField(fieldSpec.build());
+    }
+
+    private void createGetter(VariableElement field, String fieldName, String capitalizeFieldName) {
+
+        CodeBlock getterCode = CodeBlock.builder()
+                .addStatement("return " + fieldName)
+                .build();
+        MethodSpec getterMethodSpec = MethodSpec.methodBuilder("get" + capitalizeFieldName)
+                .addCode(getterCode)
+                .addModifiers(Modifier.PUBLIC)
+                .returns(TypeName.get(field.asType()))
+                .build();
+        replicatedClassBuilder.addMethod(getterMethodSpec);
+
+    }
+
+    private void createSetter(VariableElement field, String fieldName, String capitalizeFieldName) {
+
         if (!field.getModifiers().contains(Modifier.FINAL)) {
             CodeBlock setterCode = CodeBlock.builder()
                     .addStatement("this." + fieldName + "=" + fieldName)
@@ -128,29 +214,45 @@ public class ModelProcessor extends AbstractProcessor {
                     .build();
 
 
-            modelClass.addMethod(setterMethodSpec);
+            replicatedClassBuilder.addMethod(setterMethodSpec);
         }
     }
 
-    private void createGetter(VariableElement field, String fieldName, String capitalizeFieldName){
-        if (field.getAnnotation(FieldOf.class) != null){
-            FieldOf fieldOf = field.getAnnotation(FieldOf.class);
-            if (!fieldOf.getter()){
-                return;
-            }
+    private void createSingleton(Model replicatedClassModel) {
+
+        // create private final sInstance
+        // create public method getInstance
+        // inside the method, check if sInstance is null
+        // if it's null, then initialize new object
+        // return sInstance;
+
+        String className = replicatedClassModel.value();
+
+        FieldSpec sInstanceField = FieldSpec
+                .builder(ClassName.bestGuess(className), "sInstance", Modifier.PRIVATE, Modifier.STATIC)
+                .build();
+
+        replicatedClassBuilder.addField(sInstanceField);
+
+        CodeBlock codeBlock = CodeBlock.builder()
+                .beginControlFlow("if(sInstance == null)")
+                .addStatement(String.format("sInstance = new %s()", className))
+                .endControlFlow()
+                .addStatement("return sInstance")
+                .build();
+
+        MethodSpec getInstanceMethod = MethodSpec.methodBuilder("getInstance")
+                .returns(ClassName.bestGuess(className))
+                .addCode(codeBlock)
+                .addModifiers(Modifier.PUBLIC, Modifier.STATIC)
+                .build();
+
+        replicatedClassBuilder.addMethod(getInstanceMethod);
+
+        if (!isEmptyConstructorCreated) {
+            createEmptyConstructor();
         }
-        CodeBlock getterCode = CodeBlock.builder()
-                .addStatement("return " +  fieldName)
-                .build();
-        MethodSpec getterMethodSpec = MethodSpec.methodBuilder("get" + capitalizeFieldName)
-                .addCode(getterCode)
-                .addModifiers(Modifier.PUBLIC)
-                .returns(TypeName.get(field.asType()))
-                .build();
-        modelClass.addMethod(getterMethodSpec);
-
     }
-
 
     @Override
     public synchronized void init(ProcessingEnvironment processingEnv) {
@@ -176,11 +278,7 @@ public class ModelProcessor extends AbstractProcessor {
                 messager.printMessage(Diagnostic.Kind.ERROR, "Can be applied to class.");
                 return true;
             }
-//            String[] classNames = element.getAnnotation(Models.class).value()[0].value();
-            List<String> classNames = new ArrayList<>();
-            for (Model model : element.getAnnotation(Models.class).value()) {
-                classNames.add(model.value());
-            }
+            List<Model> classNames = new ArrayList<>(Arrays.asList(element.getAnnotation(Models.class).value()));
 
 
             TypeElement typeElement = (TypeElement) element;
@@ -194,23 +292,6 @@ public class ModelProcessor extends AbstractProcessor {
             modelsMap.setPackageName(packageName);
             modelsMaps.add(modelsMap);
 
-//            for (String className : classNames) {
-//                System.out.println("Class name = " + className);
-//                messager.printMessage(Diagnostic.Kind.WARNING, "Class name = " + className);
-//                TypeSpec.Builder modelClass = TypeSpec
-//                        .classBuilder(className)
-//                        .addModifiers(Modifier.PUBLIC, Modifier.FINAL);
-//
-//                for (Element enclosedElement : typeElement.getEnclosedElements()) {
-//                }
-//                try {
-//                    JavaFile.builder(packageName, modelClass.build())
-//                            .build()
-//                            .writeTo(filer);
-//                } catch (IOException e) {
-//                    e.printStackTrace();
-//                }
-//            }
 
         }
 

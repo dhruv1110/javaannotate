@@ -1,6 +1,7 @@
 package app.dhruv.javaannotate.models;
 
-import javax.lang.model.element.Element;
+import app.dhruv.javaannotate.annotations.Model;
+
 import javax.lang.model.element.TypeElement;
 import java.util.List;
 
@@ -9,7 +10,7 @@ public class ModelsMap {
 
     private String packageName;
 
-    private List<String> replicatedClasses;
+    private List<Model> replicatedClasses;
 
     public TypeElement getMainClass() {
         return mainClass;
@@ -19,11 +20,11 @@ public class ModelsMap {
         this.mainClass = mainClass;
     }
 
-    public List<String> getReplicatedClasses() {
+    public List<Model> getReplicatedClasses() {
         return replicatedClasses;
     }
 
-    public void setReplicatedClasses(List<String> replicatedClasses) {
+    public void setReplicatedClasses(List<Model> replicatedClasses) {
         this.replicatedClasses = replicatedClasses;
     }
 

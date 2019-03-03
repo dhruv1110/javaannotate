@@ -7,18 +7,7 @@ import java.lang.annotation.Target;
 
 @Retention(RetentionPolicy.CLASS)
 @Target(ElementType.FIELD)
-public @interface FieldOf {
+public @interface RenameField {
 
-    /**
-     *
-     * @return
-     */
-    String value()  default "";
-
-    boolean getter() default true;
-
-    boolean setter() default true;
-
-    String[] excludeFrom() default {};
-
+    String value();
 }

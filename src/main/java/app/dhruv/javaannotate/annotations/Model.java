@@ -18,6 +18,10 @@ public @interface Model {
 
     boolean setters() default true;
 
+    boolean builder() default false;
+
+    boolean singleton() default false;
+
     boolean equalsMethod() default false;
 
     boolean hashCodeMethod() default false;

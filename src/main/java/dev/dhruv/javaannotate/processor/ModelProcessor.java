@@ -80,6 +80,9 @@ public class ModelProcessor extends AbstractProcessor {
         CodeBlock.Builder codeBlock = CodeBlock.builder();
 
         for (FieldSpec builderFieldSpec : builderFieldSpecs) {
+            if (builderFieldSpec.modifiers.contains(Modifier.FINAL)) {
+                continue;
+            }
             typeSpec.addField(builderFieldSpec);
             codeBlock.add("this." + builderFieldSpec.name + "=" + builderFieldSpec.name + ";");
 

@@ -1,4 +1,4 @@
-package app.dhruv.javaannotate.annotations;
+package dev.dhruv.javaannotate.annotations;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;

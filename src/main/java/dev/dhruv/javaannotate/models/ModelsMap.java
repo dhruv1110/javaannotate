@@ -1,6 +1,6 @@
-package app.dhruv.javaannotate.models;
+package dev.dhruv.javaannotate.models;
 
-import app.dhruv.javaannotate.annotations.Model;
+import dev.dhruv.javaannotate.annotations.Model;
 
 import javax.lang.model.element.TypeElement;
 import java.util.List;

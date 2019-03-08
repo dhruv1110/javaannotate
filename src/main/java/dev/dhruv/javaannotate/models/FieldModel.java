@@ -1,4 +1,4 @@
-package app.dhruv.javaannotate.models;
+package dev.dhruv.javaannotate.models;
 
 import com.squareup.javapoet.TypeName;
 

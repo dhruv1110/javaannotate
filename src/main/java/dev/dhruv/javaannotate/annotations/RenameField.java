@@ -1,4 +1,4 @@
-package app.dhruv.javaannotate.annotations;
+package dev.dhruv.javaannotate.annotations;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -7,8 +7,7 @@ import java.lang.annotation.Target;
 
 @Retention(RetentionPolicy.CLASS)
 @Target(ElementType.FIELD)
-public @interface Fields {
+public @interface RenameField {
 
-    Field[] value();
-
+    String value();
 }

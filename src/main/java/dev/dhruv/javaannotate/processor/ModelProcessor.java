@@ -3,6 +3,7 @@ package dev.dhruv.javaannotate.processor;
 import com.google.auto.service.AutoService;
 import com.squareup.javapoet.*;
 import dev.dhruv.javaannotate.annotations.*;
+import dev.dhruv.javaannotate.core.*;
 import dev.dhruv.javaannotate.models.FieldModel;
 import dev.dhruv.javaannotate.models.ModelsMap;
 
@@ -30,24 +31,12 @@ public class ModelProcessor extends AbstractProcessor {
     private TypeSpec.Builder replicatedClassBuilder;
     private Map<String, FieldModel> replicatedClassFieldsMap;
     private List<FieldSpec> builderFieldSpecs = new ArrayList<>();
+    MethodCreator methodCreator;
 
     private void createAllFieldConstructor() {
         isAllFieldConstructorCreated = true;
-
-        MethodSpec.Builder getterMethodSpec = MethodSpec.constructorBuilder()
-                .addModifiers(Modifier.PUBLIC);
-
-        for (FieldModel fieldModel : replicatedClassFieldsMap.values()) {
-            if (!fieldModel.isFinal()) {
-                ParameterSpec parameterSpec = ParameterSpec.builder(fieldModel.getTypeName(), fieldModel.getFieldName())
-                        .build();
-                getterMethodSpec.addParameter(parameterSpec);
-                getterMethodSpec.addStatement("this." + fieldModel.getFieldName() + "=" + fieldModel.getFieldName());
-            }
-        }
-
-
-        replicatedClassBuilder.addMethod(getterMethodSpec.build());
+        methodCreator = new AllFieldConstructorCreator(replicatedClassFieldsMap.values());
+        replicatedClassBuilder.addMethod(methodCreator.create());
     }
 
     private void createBuilder(Model replicatedClassModel) {
@@ -84,7 +73,7 @@ public class ModelProcessor extends AbstractProcessor {
                 continue;
             }
             typeSpec.addField(builderFieldSpec);
-            codeBlock.add("this." + builderFieldSpec.name + "=" + builderFieldSpec.name + ";");
+            codeBlock.add("this." + builderFieldSpec.name + "=" + builderFieldSpec.name + ";\n");
 
             MethodSpec builderAddFieldMethod = MethodSpec.methodBuilder(builderFieldSpec.name)
                     .returns(ClassName.bestGuess("Builder"))
@@ -113,7 +102,8 @@ public class ModelProcessor extends AbstractProcessor {
         }
 
         if (replicatedClassModel.singleton()) {
-            createSingleton(replicatedClassModel);
+            SingletonCreator singletonCreator = new SingletonCreator(replicatedClassBuilder);
+            replicatedClassBuilder = singletonCreator.create();
         }
 
         if (replicatedClassModel.builder()) {
@@ -185,13 +175,15 @@ public class ModelProcessor extends AbstractProcessor {
     private void createElements(VariableElement originalField, String fieldName, boolean createSetter, boolean createGetter) {
 
         createField(originalField, fieldName);
-        String capitalizeFieldName = fieldName.substring(0, 1).toUpperCase() + fieldName.substring(1);
+        boolean isFinal = originalField.getModifiers().contains(Modifier.FINAL);
 
-        if (createSetter) {
-            createSetter(originalField, fieldName, capitalizeFieldName);
+        if (createSetter && !isFinal) {
+            methodCreator = new SetterCreator(originalField, fieldName);
+            replicatedClassBuilder.addMethod(methodCreator.create());
         }
         if (createGetter) {
-            createGetter(originalField, fieldName, capitalizeFieldName);
+            methodCreator = new GetterCreator(originalField, fieldName);
+            replicatedClassBuilder.addMethod(methodCreator.create());
         }
 
         FieldModel fieldModel = new FieldModel(TypeName.get(originalField.asType()), fieldName, originalField.getModifiers().contains(Modifier.FINAL));
@@ -200,10 +192,8 @@ public class ModelProcessor extends AbstractProcessor {
 
     private void createEmptyConstructor() {
         isEmptyConstructorCreated = true;
-        MethodSpec getterMethodSpec = MethodSpec.constructorBuilder()
-                .addModifiers(Modifier.PUBLIC)
-                .build();
-        replicatedClassBuilder.addMethod(getterMethodSpec);
+        methodCreator = new EmptyConstructorCreator();
+        replicatedClassBuilder.addMethod(methodCreator.create());
     }
 
     private void createField(VariableElement originalField, String fieldName) {
@@ -226,73 +216,8 @@ public class ModelProcessor extends AbstractProcessor {
         builderFieldSpecs.add(fieldSpec.build());
     }
 
-    private void createGetter(VariableElement field, String fieldName, String capitalizeFieldName) {
-
-        CodeBlock getterCode = CodeBlock.builder()
-                .addStatement("return " + fieldName)
-                .build();
-        MethodSpec getterMethodSpec = MethodSpec.methodBuilder("get" + capitalizeFieldName)
-                .addCode(getterCode)
-                .addModifiers(Modifier.PUBLIC)
-                .returns(TypeName.get(field.asType()))
-                .build();
-        replicatedClassBuilder.addMethod(getterMethodSpec);
-
-    }
-
-    private void createSetter(VariableElement field, String fieldName, String capitalizeFieldName) {
-
-        if (!field.getModifiers().contains(Modifier.FINAL)) {
-            CodeBlock setterCode = CodeBlock.builder()
-                    .addStatement("this." + fieldName + "=" + fieldName)
-                    .build();
-            MethodSpec setterMethodSpec = MethodSpec.methodBuilder("set" + capitalizeFieldName)
-                    .addCode(setterCode)
-                    .addModifiers(Modifier.PUBLIC)
-                    .addParameter(TypeName.get(field.asType()), fieldName)
-                    .returns(void.class)
-                    .build();
 
 
-            replicatedClassBuilder.addMethod(setterMethodSpec);
-        }
-    }
-
-    private void createSingleton(Model replicatedClassModel) {
-
-        // create private final sInstance
-        // create public method getInstance
-        // inside the method, check if sInstance is null
-        // if it's null, then initialize new object
-        // return sInstance;
-
-        String className = replicatedClassModel.value();
-
-        FieldSpec sInstanceField = FieldSpec
-                .builder(ClassName.bestGuess(className), "sInstance", Modifier.PRIVATE, Modifier.STATIC)
-                .build();
-
-        replicatedClassBuilder.addField(sInstanceField);
-
-        CodeBlock codeBlock = CodeBlock.builder()
-                .beginControlFlow("if(sInstance == null)")
-                .addStatement(String.format("sInstance = new %s()", className))
-                .endControlFlow()
-                .addStatement("return sInstance")
-                .build();
-
-        MethodSpec getInstanceMethod = MethodSpec.methodBuilder("getInstance")
-                .returns(ClassName.bestGuess(className))
-                .addCode(codeBlock)
-                .addModifiers(Modifier.PUBLIC, Modifier.STATIC)
-                .build();
-
-        replicatedClassBuilder.addMethod(getInstanceMethod);
-
-        if (!isEmptyConstructorCreated) {
-            createEmptyConstructor();
-        }
-    }
 
     @Override
     public synchronized void init(ProcessingEnvironment processingEnv) {

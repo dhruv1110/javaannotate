@@ -1,4 +1,4 @@
-package dev.dhruv.javaannotate.core;
+package dev.dhruv.javaannotate.core.methods;
 
 import com.squareup.javapoet.CodeBlock;
 import com.squareup.javapoet.MethodSpec;

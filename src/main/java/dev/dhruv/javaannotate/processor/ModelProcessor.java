@@ -1,9 +1,15 @@
 package dev.dhruv.javaannotate.processor;
 
 import com.google.auto.service.AutoService;
-import com.squareup.javapoet.*;
+import com.squareup.javapoet.FieldSpec;
+import com.squareup.javapoet.JavaFile;
+import com.squareup.javapoet.TypeName;
+import com.squareup.javapoet.TypeSpec;
 import dev.dhruv.javaannotate.annotations.*;
-import dev.dhruv.javaannotate.core.*;
+import dev.dhruv.javaannotate.core.classes.BuilderCreator;
+import dev.dhruv.javaannotate.core.classes.ClassCreator;
+import dev.dhruv.javaannotate.core.classes.SingletonCreator;
+import dev.dhruv.javaannotate.core.methods.*;
 import dev.dhruv.javaannotate.models.FieldModel;
 import dev.dhruv.javaannotate.models.ModelsMap;
 
@@ -12,7 +18,6 @@ import javax.lang.model.SourceVersion;
 import javax.lang.model.element.*;
 import javax.lang.model.util.ElementFilter;
 import javax.lang.model.util.Elements;
-import javax.lang.model.util.Types;
 import javax.tools.Diagnostic;
 import java.io.IOException;
 import java.util.*;
@@ -22,92 +27,33 @@ import java.util.*;
 @SupportedSourceVersion(SourceVersion.RELEASE_8)
 @AutoService(Processor.class)
 public class ModelProcessor extends AbstractProcessor {
+    private MethodCreator methodCreator;
+    private ClassCreator classCreator;
     private Elements elements;
-    private boolean isAllFieldConstructorCreated = false;
     private Filer filer;
     private Messager messager;
-    private boolean isEmptyConstructorCreated = false;
-    private Types types;
     private TypeSpec.Builder replicatedClassBuilder;
     private Map<String, FieldModel> replicatedClassFieldsMap;
-    private List<FieldSpec> builderFieldSpecs = new ArrayList<>();
-    MethodCreator methodCreator;
-
-    private void createAllFieldConstructor() {
-        isAllFieldConstructorCreated = true;
-        methodCreator = new AllFieldConstructorCreator(replicatedClassFieldsMap.values());
-        replicatedClassBuilder.addMethod(methodCreator.create());
-    }
-
-    private void createBuilder(Model replicatedClassModel) {
-
-        // create static builder class
-        // initialize all the fields with null
-        // create set methods for all the fields
-        // create build() method and inside that create object with all argument constructor
-
-
-        TypeSpec.Builder typeSpec = TypeSpec.classBuilder("Builder")
-                .addModifiers(Modifier.PUBLIC, Modifier.STATIC);
-
-        MethodSpec constuctor = MethodSpec.methodBuilder("Builder")
-                .returns(ClassName.bestGuess("Builder"))
-                .addStatement("return new Builder()")
-                .addModifiers(Modifier.PUBLIC, Modifier.STATIC)
-                .build();
-
-        MethodSpec buildMethod = MethodSpec.methodBuilder("build")
-                .returns(ClassName.bestGuess(replicatedClassModel.value()))
-                .addStatement("return new " + replicatedClassModel.value() + "(this)")
-                .addModifiers(Modifier.PUBLIC)
-                .build();
-
-        replicatedClassBuilder.addMethod(constuctor);
-        typeSpec.addMethod(buildMethod);
-
-
-        CodeBlock.Builder codeBlock = CodeBlock.builder();
-
-        for (FieldSpec builderFieldSpec : builderFieldSpecs) {
-            if (builderFieldSpec.modifiers.contains(Modifier.FINAL)) {
-                continue;
-            }
-            typeSpec.addField(builderFieldSpec);
-            codeBlock.add("this." + builderFieldSpec.name + "=" + builderFieldSpec.name + ";\n");
-
-            MethodSpec builderAddFieldMethod = MethodSpec.methodBuilder(builderFieldSpec.name)
-                    .returns(ClassName.bestGuess("Builder"))
-                    .addParameter(builderFieldSpec.type, builderFieldSpec.name)
-                    .addStatement("this." + builderFieldSpec.name + "=" + builderFieldSpec.name)
-                    .addStatement("return this")
-                    .build();
-            typeSpec.addMethod(builderAddFieldMethod);
-        }
-        MethodSpec initBuilderMethod = MethodSpec.constructorBuilder()
-                .addParameter(ClassName.bestGuess("Builder"), "Builder")
-                .addCode(codeBlock.build())
-                .build();
-
-        replicatedClassBuilder.addMethod(initBuilderMethod);
-        replicatedClassBuilder.addType(typeSpec.build());
-    }
 
     private void createClassElements(Model replicatedClassModel) {
         if (replicatedClassModel.emptyConstructor()) {
-            createEmptyConstructor();
+            methodCreator = new EmptyConstructorCreator();
+            replicatedClassBuilder.addMethod(methodCreator.create());
         }
 
         if (replicatedClassModel.allArgConstructor()) {
-            createAllFieldConstructor();
+            methodCreator = new AllFieldConstructorCreator(replicatedClassFieldsMap.values());
+            replicatedClassBuilder.addMethod(methodCreator.create());
         }
 
         if (replicatedClassModel.singleton()) {
-            SingletonCreator singletonCreator = new SingletonCreator(replicatedClassBuilder);
-            replicatedClassBuilder = singletonCreator.create();
+            classCreator = new SingletonCreator(replicatedClassBuilder);
+            replicatedClassBuilder = classCreator.create();
         }
 
         if (replicatedClassModel.builder()) {
-            createBuilder(replicatedClassModel);
+            classCreator = new BuilderCreator(replicatedClassBuilder);
+            replicatedClassBuilder = classCreator.create();
         }
     }
 
@@ -119,8 +65,6 @@ public class ModelProcessor extends AbstractProcessor {
             // iterate through all @Model annotation
             for (Model replicatedClassModel : modelsMap.getReplicatedClasses()) {
                 replicatedClassFieldsMap = new HashMap<>();
-                isEmptyConstructorCreated = false;
-                isAllFieldConstructorCreated = false;
                 replicatedClassBuilder = TypeSpec
                         .classBuilder(replicatedClassModel.value())
                         .addModifiers(Modifier.PUBLIC);
@@ -190,12 +134,6 @@ public class ModelProcessor extends AbstractProcessor {
         replicatedClassFieldsMap.put(fieldName, fieldModel);
     }
 
-    private void createEmptyConstructor() {
-        isEmptyConstructorCreated = true;
-        methodCreator = new EmptyConstructorCreator();
-        replicatedClassBuilder.addMethod(methodCreator.create());
-    }
-
     private void createField(VariableElement originalField, String fieldName) {
         FieldSpec.Builder fieldSpec = FieldSpec.builder(TypeName.get(originalField.asType()), fieldName)
                 .addModifiers(originalField.getModifiers().toArray(new Modifier[originalField.getModifiers().size()]));
@@ -213,10 +151,7 @@ public class ModelProcessor extends AbstractProcessor {
             }
         }
         replicatedClassBuilder.addField(fieldSpec.build());
-        builderFieldSpecs.add(fieldSpec.build());
     }
-
-
 
 
     @Override
@@ -224,7 +159,6 @@ public class ModelProcessor extends AbstractProcessor {
         messager = processingEnv.getMessager();
         elements = processingEnv.getElementUtils();
         filer = processingEnv.getFiler();
-        types = processingEnv.getTypeUtils();
 
     }
 

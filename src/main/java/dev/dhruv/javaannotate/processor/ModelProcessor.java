@@ -6,10 +6,10 @@ import com.squareup.javapoet.JavaFile;
 import com.squareup.javapoet.TypeName;
 import com.squareup.javapoet.TypeSpec;
 import dev.dhruv.javaannotate.annotations.*;
-import dev.dhruv.javaannotate.core.classes.BuilderCreator;
-import dev.dhruv.javaannotate.core.classes.ClassCreator;
-import dev.dhruv.javaannotate.core.classes.SingletonCreator;
-import dev.dhruv.javaannotate.core.methods.*;
+import dev.dhruv.javaannotate.core.clazz.BuilderCreator;
+import dev.dhruv.javaannotate.core.clazz.ClassCreator;
+import dev.dhruv.javaannotate.core.clazz.SingletonCreator;
+import dev.dhruv.javaannotate.core.method.*;
 import dev.dhruv.javaannotate.models.FieldModel;
 import dev.dhruv.javaannotate.models.ModelsMap;
 

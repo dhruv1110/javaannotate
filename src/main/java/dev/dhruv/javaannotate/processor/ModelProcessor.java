@@ -1,7 +1,6 @@
 package dev.dhruv.javaannotate.processor;
 
 import com.google.auto.service.AutoService;
-import com.squareup.javapoet.FieldSpec;
 import com.squareup.javapoet.JavaFile;
 import com.squareup.javapoet.TypeName;
 import com.squareup.javapoet.TypeSpec;
@@ -9,6 +8,7 @@ import dev.dhruv.javaannotate.annotations.*;
 import dev.dhruv.javaannotate.core.clazz.BuilderCreator;
 import dev.dhruv.javaannotate.core.clazz.ClassCreator;
 import dev.dhruv.javaannotate.core.clazz.SingletonCreator;
+import dev.dhruv.javaannotate.core.field.FieldCreator;
 import dev.dhruv.javaannotate.core.method.*;
 import dev.dhruv.javaannotate.models.FieldModel;
 import dev.dhruv.javaannotate.models.ModelsMap;
@@ -29,6 +29,7 @@ import java.util.*;
 public class ModelProcessor extends AbstractProcessor {
     private MethodCreator methodCreator;
     private ClassCreator classCreator;
+    private FieldCreator fieldCreator;
     private Elements elements;
     private Filer filer;
     private Messager messager;
@@ -118,9 +119,10 @@ public class ModelProcessor extends AbstractProcessor {
 
     private void createElements(VariableElement originalField, String fieldName, boolean createSetter, boolean createGetter) {
 
-        createField(originalField, fieldName);
         boolean isFinal = originalField.getModifiers().contains(Modifier.FINAL);
 
+        fieldCreator = new FieldCreator(originalField, fieldName);
+        replicatedClassBuilder.addField(fieldCreator.create());
         if (createSetter && !isFinal) {
             methodCreator = new SetterCreator(originalField, fieldName);
             replicatedClassBuilder.addMethod(methodCreator.create());
@@ -132,25 +134,6 @@ public class ModelProcessor extends AbstractProcessor {
 
         FieldModel fieldModel = new FieldModel(TypeName.get(originalField.asType()), fieldName, originalField.getModifiers().contains(Modifier.FINAL));
         replicatedClassFieldsMap.put(fieldName, fieldModel);
-    }
-
-    private void createField(VariableElement originalField, String fieldName) {
-        FieldSpec.Builder fieldSpec = FieldSpec.builder(TypeName.get(originalField.asType()), fieldName)
-                .addModifiers(originalField.getModifiers().toArray(new Modifier[originalField.getModifiers().size()]));
-
-        Object value = null;
-        if (originalField.getConstantValue() != null
-                && originalField.getModifiers().contains(Modifier.FINAL)) {
-            value = originalField.getConstantValue();
-            if (value instanceof String) {
-                fieldSpec.initializer("$S", value);
-            } else if (value instanceof Long) {
-                fieldSpec.initializer("$LL", value);
-            } else {
-                fieldSpec.initializer("$L", value);
-            }
-        }
-        replicatedClassBuilder.addField(fieldSpec.build());
     }
 
 

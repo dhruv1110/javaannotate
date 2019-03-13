@@ -8,8 +8,8 @@ import javax.lang.model.element.VariableElement;
 
 public class FieldCreator {
 
-    VariableElement classFieldElement;
-    String fieldName;
+    private VariableElement classFieldElement;
+    private String fieldName;
 
     public FieldCreator(VariableElement classFieldElement, String fieldName) {
         this.classFieldElement = classFieldElement;

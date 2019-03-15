@@ -9,6 +9,7 @@ import com.sun.tools.javac.processing.JavacProcessingEnvironment;
 import com.sun.tools.javac.tree.JCTree;
 import com.sun.tools.javac.tree.TreeMaker;
 import com.sun.tools.javac.util.Context;
+import com.sun.tools.javac.util.ListBuffer;
 import com.sun.tools.javac.util.Name;
 import dev.dhruv.javaannotate.annotations.Getter;
 import dev.dhruv.javaannotate.core.clazz.ClassCreator;
@@ -41,12 +42,28 @@ public class GetterProcessor extends AbstractProcessor {
     private TreeMaker treeMaker;
     private Trees trees;
 
-    private JCTree.JCVariableDecl createHelloWorld(VariableElement variableElement) {
-        Name name = javacElements.getName("test");
+    private JCTree.JCMethodDecl createHelloWorld(VariableElement variableElement) {
+        Name name = javacElements.getName("get" + variableElement.getSimpleName().toString());
         JCTree.JCModifiers modifiers = treeMaker.Modifiers(java.lang.reflect.Modifier.PUBLIC);
-        JCTree.JCIdent jcIdent = treeMaker.Ident(javacElements.getName("String"));
-        JCTree.JCVariableDecl jcVariableDecl = treeMaker.VarDef(modifiers, name, jcIdent, null);
-        return jcVariableDecl;
+
+        String dataType = variableElement.asType().toString();
+        String[] dataTypes = dataType.split("\\.");
+        JCTree.JCIdent jcIdent = treeMaker.Ident(javacElements.getName(dataTypes[dataTypes.length - 1]));
+        ListBuffer<JCTree.JCTypeParameter> parameters = new ListBuffer<>();
+        ListBuffer<JCTree.JCVariableDecl> paramvalues = new ListBuffer<>();
+
+
+        ListBuffer<JCTree.JCExpression> var6 = new ListBuffer<>();
+//        com.sun.tools.javac.util.List<JCTree.JCTypeParameter> parameters = new List<JCTree.JCTypeParameter>();
+//        com.sun.tools.javac.util.List<JCTree.JCVariableDecl> paramValues = new ArrayList<>();
+//        com.sun.tools.javac.util.List<JCTree.JCExpression> var6 = new ArrayList<>();
+        ListBuffer<JCTree.JCStatement> statements = new ListBuffer<>();
+        JCTree.JCReturn jcReturn = treeMaker.Return(treeMaker.Ident(javacElements.getName(variableElement.getSimpleName().toString())));
+        statements.add(jcReturn);
+        JCTree.JCBlock jcBlock = treeMaker.Block(0, statements.toList());
+        return treeMaker.MethodDef(modifiers, name, jcIdent, parameters.toList(), paramvalues.toList(), var6.toList(), jcBlock, null);
+//        JCTree.JCVariableDecl jcVariableDecl = treeMaker.VarDef(modifiers, name, jcIdent, null);
+//        return jcVariableDecl;
     }
 
     @Override
@@ -106,21 +123,20 @@ public class GetterProcessor extends AbstractProcessor {
                 fieldCreator = new FieldCreator(originalField, originalField.getSimpleName().toString());
                 clazzBuilder.addField(fieldCreator.create());
 
-                JCTree.JCVariableDecl jcVariableDecl = createHelloWorld(originalField);
-                classDecl.defs.append(jcVariableDecl);
-
+                JCTree.JCMethodDecl jcVariableDecl = createHelloWorld(originalField);
+                classDecl.defs = classDecl.defs.prepend(jcVariableDecl);
 
             }
 //            JavaFileObject javaFileObject
 //                    = null;
 //            try {
-//                FileObject fileObject
-//                        = filer.getResource(StandardLocation.SOURCE_OUTPUT, packageName, typeElement.getSimpleName().toString());
-//                boolean isFileDeleted = fileObject.delete();
-//                messager.printMessage(Diagnostic.Kind.MANDATORY_WARNING, "Deleted ==> " + isFileDeleted);
+//                String body = JavaFile.builder(packageName, clazzBuilder.build())
+//                            .build()
+//                        .toString();
+//
 //                javaFileObject = filer.createSourceFile(packageName + "." + typeElement.getSimpleName().toString());
 //                Writer writer = javaFileObject.openWriter();
-//                writer.write(clazzBuilder.build().toString());
+//                writer.write(body);
 //                writer.flush();
 //                writer.close();
 //            } catch (IOException e) {

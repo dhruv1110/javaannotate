@@ -2,9 +2,9 @@ package dev.dhruv.javaannotate.processor;
 
 import com.google.auto.service.AutoService;
 import com.sun.tools.javac.code.Flags;
-import com.sun.tools.javac.code.Type;
 import com.sun.tools.javac.code.TypeTag;
 import com.sun.tools.javac.tree.JCTree;
+import com.sun.tools.javac.util.List;
 import com.sun.tools.javac.util.ListBuffer;
 import com.sun.tools.javac.util.Name;
 import dev.dhruv.javaannotate.annotations.Setter;
@@ -19,8 +19,6 @@ import javax.lang.model.SourceVersion;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.element.VariableElement;
-import java.lang.reflect.Modifier;
-import java.util.List;
 import java.util.Set;
 
 @SupportedAnnotationTypes(
@@ -35,37 +33,40 @@ public class SetterProcessor extends BaseJavacProcessor {
 
         JCTree.JCVariableDecl variableDecl = JavacUtils.getVariableDeclaration(trees, variableElement);
 
-        Name name = javacElements.getName(ElementUtils.setterMathodName(variableElement));
-        JCTree.JCModifiers modifiers = treeMaker.Modifiers(java.lang.reflect.Modifier.PUBLIC);
+        Name methodName = javacElements.getName(ElementUtils.setterMathodName(variableElement));
+        JCTree.JCModifiers methodModifiers = treeMaker.Modifiers(java.lang.reflect.Modifier.PUBLIC);
 
-        ListBuffer<JCTree.JCTypeParameter> parameters = new ListBuffer<>();
-        ListBuffer<JCTree.JCVariableDecl> paramValues = new ListBuffer<>();
-        paramValues.add(treeMaker.VarDef(treeMaker.Modifiers(Flags.PARAMETER),javacElements.getName(variableElement.getSimpleName().toString()), variableDecl.vartype, null));
+        ListBuffer<JCTree.JCVariableDecl> methodParameters = new ListBuffer<>();
+        methodParameters.add(
+                treeMaker.VarDef(treeMaker.Modifiers(Flags.PARAMETER)
+                        , javacElements.getName(variableElement.getSimpleName().toString())
+                        , treeMaker.Type(variableDecl.vartype.type)
+                        , null));
 
-        ListBuffer<JCTree.JCExpression> var6 = new ListBuffer<>();
+
+        return treeMaker.MethodDef(methodModifiers
+                , methodName
+                , treeMaker.TypeIdent(TypeTag.VOID)
+                , List.nil()
+                , methodParameters.toList()
+                , List.nil()
+                , createSetterMethodBody(variableDecl)
+                , null);
+
+    }
+
+
+    private JCTree.JCBlock createSetterMethodBody(JCTree.JCVariableDecl variableDecl) {
         ListBuffer<JCTree.JCStatement> statements = new ListBuffer<>();
 
 
         JCTree.JCExpression chain = treeMaker.This(variableDecl.vartype.type);
 
-        chain = treeMaker.Select(chain,variableDecl.name );
+        chain = treeMaker.Select(chain, variableDecl.name);
         chain = treeMaker.Assign(chain, treeMaker.Ident(variableDecl));
         statements.add(treeMaker.Exec(chain));
-
-//        JCTree.JCReturn jcReturn = treeMaker.Return(treeMaker.Ident(javacElements.getName(variableElement.getSimpleName().toString())));
-//        statements.add(jcReturn);
-        JCTree.JCBlock jcBlock = treeMaker.Block(0, statements.toList());
-        return treeMaker.MethodDef(modifiers
-                , name
-                , treeMaker.TypeIdent(TypeTag.VOID)
-                , parameters.toList()
-                , paramValues.toList()
-                , var6.toList()
-                , jcBlock
-                , null);
-
+        return treeMaker.Block(0, statements.toList());
     }
-
 
     /**
      * {@inheritDoc}
@@ -76,14 +77,13 @@ public class SetterProcessor extends BaseJavacProcessor {
     @Override
     public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
 
-
         for (Element element : roundEnv.getElementsAnnotatedWith(Setter.class)) {
 
-            List<VariableElement> originalFields = ElementUtils.getFields(element);
+            java.util.List<VariableElement> originalFields = ElementUtils.getFields(element);
             JCTree.JCClassDecl classDecl = JavacUtils.getClassDeclaration(trees, element);
             for (VariableElement originalField : originalFields) {
 
-                if (originalField.getModifiers().contains(javax.lang.model.element.Modifier.FINAL)){
+                if (originalField.getModifiers().contains(javax.lang.model.element.Modifier.FINAL)) {
                     continue;
                 }
 

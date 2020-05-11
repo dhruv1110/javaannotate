@@ -4,7 +4,7 @@
 
     <groupId>dev.dhruv</groupId>
     <artifactId>javaannotate</artifactId>
-    <version>1.0.2-SNAPSHOT</version>
+    <version>1.0.2</version>
 
     <packaging>jar</packaging>
     <name>Java Annotate</name>
@@ -33,7 +33,7 @@
         <url>https://github.com/dhruv1110/javaannotate</url>
         <connection>scm:git:git@github.com:dhruv1110/javaannotate.git</connection>
         <developerConnection>scm:git:git@github.com:dhruv1110/javaannotate.git</developerConnection>
-      <tag>HEAD</tag>
+      <tag>javaannotate-1.0.2</tag>
   </scm>
 
     <properties>
@@ -87,7 +87,7 @@
             <distributionManagement>
                 <repository>
                     <id>ossrh</id>
-                    <url>https://oss.sonatype.org/service/local/staging/deploy/maven2</url>
+                    <url>https://oss.sonatype.org/content/repositories/releases/</url>
                 </repository>
             </distributionManagement>
             <build>
